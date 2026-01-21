@@ -1,0 +1,16 @@
+{
+    "name": "werewolf",
+    "version": "1.0.0",
+    "description": "Werewolf game",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "run": "node src/ww.ts",
+        "compile-fast": "compact compile +0.27.0 --skip-zk contract/game.compact ww-dist",
+        "compile": "compact compile +0.27.0 contract/game.compact ww-dist",
+        "test": "node test/ww.test.ts"
+    },
+    "dependencies": {
+        "@midnight-ntwrk/compact-runtime": "0.11.0-rc.1"
+    }
+}

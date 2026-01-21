@@ -1,0 +1,42 @@
+module WerewolfTypes {
+    import CompactStandardLibrary;
+
+    export enum Role {
+        Villager,
+        Werewolf,
+        Seer,
+        Doctor
+    }
+
+    export enum Phase {
+        Lobby,
+        Night,
+        Day,
+        Finished
+    }
+
+    export struct PlayerConfig {
+        // The public key used to identify the player and verify their signatures/actions
+        publicKey: ZswapCoinPublicKey,
+        // Commitment to the role: Hash(role, salt) - used to verify role upon death/endgame
+        roleCommitment: Bytes<32>,
+        // Encrypted role for the player to decrypt: Enc(role, player_pk)
+        encryptedRole: CurvePoint
+    }
+
+    // Stores the public game state
+    export struct GameState {
+        adminKey: ZswapCoinPublicKey, // Trusted Node Public Key
+        phase: Phase,
+        round: Uint<32>,
+        playerCount: Uint<32>,
+        aliveCount: Uint<32>,
+        werewolfCount: Uint<32>,
+        villagerCount: Uint<32>,
+        // Root of the Merkle Tree of ALIVE players
+        aliveTreeRoot: MerkleTreeDigest,
+        // Rolling hash of all encrypted moves and resolutions
+        // Allows off-chain replay/verification of the exact game sequence
+        transcriptHash: Bytes<32>
+    }
+}

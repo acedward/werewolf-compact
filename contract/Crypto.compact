@@ -1,0 +1,47 @@
+module Crypto {
+    import CompactStandardLibrary;
+    import CompactStandardLibrary prefix std_;
+
+    // Wrapper for persistent hashing
+    export circuit hash(data: Bytes<32>): Bytes<32> {
+        return std_persistentHash<Bytes<32>>(data);
+    }
+    
+    export circuit hash2(a: Bytes<32>, b: Bytes<32>): Bytes<32> {
+        return std_persistentHash<[Bytes<32>, Bytes<32>]>([a, b]);
+    }
+
+    export circuit commitRole(role: Uint<8>, salt: Bytes<32>): Bytes<32> {
+        return std_persistentHash<[Uint<8>, Bytes<32>]>([role, salt]);
+    }
+
+    // Verifies a Merkle Proof
+    export circuit verifyMerkleProof(root: MerkleTreeDigest, leaf: Bytes<32>, path: MerkleTreePath<10, Bytes<32>>): Boolean {
+        // Ensure the leaf in the path matches the claim
+        if (path.leaf != leaf) {
+            return false;
+        }
+        // compute root and check
+        return std_merkleTreePathRoot<10, Bytes<32>>(path) == root;
+    }
+
+    export circuit isValidPoint(p: CurvePoint): Boolean {
+        return true; 
+    }
+
+    // Derives a Public Key (CurvePoint) from a Private Key (Scalar Field)
+    // Used to verify the Master Secret at the end of the game
+    export circuit derivePublicKey(secret: Bytes<32>): ZswapCoinPublicKey {
+        // Convert bytes to field element
+        const scalar = std_degradeToTransient(secret);
+        // G * scalar
+        const point = std_ecMulGenerator(scalar);
+        
+        // Serialize point to Bytes<32> for ZswapCoinPublicKey format
+        // In a real impl, we'd compress X/Y. Here we assume a standard hash/serialization
+        // or just use the X coord if that's the standard. 
+        // For this mock, we'll hash the coordinates to get the bytes representation.
+        const pkBytes = std_persistentHash<[Field, Field]>([point.x, point.y]);
+        return ZswapCoinPublicKey { bytes: pkBytes };
+    }
+}

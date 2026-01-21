@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: MIT
+pragma language_version >= 0.19.0;
+
+import CompactStandardLibrary;
+import CompactStandardLibrary prefix std_;
+import "./WerewolfTypes";
+import "./Werewolf" prefix Werewolf_;
+import "./Crypto" prefix Crypto_;
+
+export { 
+    Role, 
+    Phase, 
+    PlayerConfig, 
+    GameState 
+};
+
+export { 
+    Werewolf_games, 
+    Werewolf_playerAlive, 
+    Werewolf_playerConfigs, 
+    Werewolf_voteNullifiers,
+    Werewolf_gameSecrets
+};
+
+constructor() {}
+
+// =========================================================================
+// GAME ACTIONS
+// =========================================================================
+
+export circuit createGame(
+    gameId: Bytes<32>, 
+    adminKey: ZswapCoinPublicKey,
+    initialRoot: MerkleTreeDigest,
+    configs: Vector<10, PlayerConfig>,
+    actualCount: Uint<32>,
+    werewolfCount: Uint<32>
+): [] {
+    return Werewolf_initGame(
+        disclose(gameId), 
+        disclose(adminKey), 
+        disclose(initialRoot), 
+        disclose(configs), 
+        disclose(actualCount), 
+        disclose(werewolfCount)
+    );
+}
+
+export circuit forceEndGame(
+    gameId: Bytes<32>,
+    masterSecret: Bytes<32>
+): [] {
+    return Werewolf_endGame(gameId, masterSecret);
+}
+
+export circuit nightAction(
+    gameId: Bytes<32>,
+    encryptedAction: Bytes<32>,
+    merklePath: MerkleTreePath<10, Bytes<32>>,
+    leafSecret: Bytes<32>
+): [] {
+    return Werewolf_submitNightAction(
+        gameId, 
+        encryptedAction, 
+        merklePath, 
+        leafSecret
+    );
+}
+
+export circuit resolveNightPhase(
+    gameId: Bytes<32>,
+    newRound: Uint<32>,
+    deadPlayerIdx: Uint<32>, 
+    hasDeath: Boolean,
+    newMerkleRoot: MerkleTreeDigest
+): [] {
+    return Werewolf_resolveNight(
+        gameId, 
+        newRound, 
+        deadPlayerIdx, 
+        hasDeath, 
+        newMerkleRoot
+    );
+}
+
+export circuit voteDay(
+    gameId: Bytes<32>,
+    encryptedVote: Bytes<32>,
+    merklePath: MerkleTreePath<10, Bytes<32>>,
+    leafSecret: Bytes<32>
+): [] {
+    return Werewolf_castDayVote(
+        gameId, 
+        encryptedVote, 
+        merklePath, 
+        leafSecret
+    );
+}
+
+export circuit resolveDayPhase(
+    gameId: Bytes<32>,
+    eliminatedIdx: Uint<32>,
+    hasElimination: Boolean
+): [] {
+    return Werewolf_resolveDay(gameId, eliminatedIdx, hasElimination);
+}
+
+export circuit revealPlayerRole(
+    gameId: Bytes<32>,
+    playerIdx: Uint<32>,
+    role: Uint<8>,
+    salt: Bytes<32>
+): [] {
+    return Werewolf_revealRole(gameId, playerIdx, role, salt);
+}
+
+export circuit verifyFairness(
+    gameId: Bytes<32>,
+    masterSecret: Bytes<32>,
+    playerIdx: Uint<32>,
+    assignedRole: Uint<8>
+): Boolean {
+    return Werewolf_verifyGameSetup(
+        gameId, 
+        masterSecret, 
+        playerIdx, 
+        assignedRole
+    );
+}
+
+// =========================================================================
+// READ-ONLY & TEST HELPERS
+// =========================================================================
+
+export circuit getGameState(gameId: Bytes<32>): GameState {
+    const gid = disclose(gameId);
+    assert(Werewolf_games.member(gid), "Game not found");
+    return Werewolf_games.lookup(gid);
+}
+
+export circuit isPlayerAlive(gameId: Bytes<32>, playerIdx: Uint<32>): Boolean {
+    const gid = disclose(gameId);
+    return Werewolf_playerAlive.lookup(gid).lookup(disclose(playerIdx));
+}
+
+export circuit getAdminKey(): ZswapCoinPublicKey {
+    return Werewolf_getAdminKey();
+}
+
+/**
+ * @description Helper for Tests: Generates a role commitment using the contract's 
+ * internal hashing logic. Ensures tests pass without crypto mismatches.
+ */
+export circuit testComputeCommitment(role: Uint<8>, salt: Bytes<32>): Bytes<32> {
+    return Crypto_commitRole(role, salt);
+}
+
+/**
+ * @description Helper for Tests: Hashes data to match Merkle Leaf generation.
+ */
+export circuit testComputeHash(data: Bytes<32>): Bytes<32> {
+    return Crypto_hash(data);
+}
