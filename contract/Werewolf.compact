@@ -27,6 +27,7 @@ module Werewolf {
         gameId: Bytes<32>, 
         adminKey: ZswapCoinPublicKey,
         initialRoot: MerkleTreeDigest,
+        masterSecretCommitment: Bytes<32>,
         configs: Vector<10, PlayerConfig>,
         actualCount: Uint<32>,
         werewolfCount: Uint<32>
@@ -43,6 +44,7 @@ module Werewolf {
             werewolfCount: werewolfCount,
             villagerCount: (actualCount - werewolfCount) as Uint<32>,
             aliveTreeRoot: initialRoot,
+            masterSecretCommitment: masterSecretCommitment,
             transcriptHash: pad(32, "genesis")
         };
         
@@ -78,7 +80,7 @@ module Werewolf {
         
         // 1. Prove Alive
         const leaf = Crypto_hash(leafSecret);
-        assert(Crypto_verifyMerkleProof(state.aliveTreeRoot, leaf, merklePath), "Invalid Merkle Proof");
+        assert(Crypto_verifyMerkleProof(state.aliveTreeRoot, leaf, merklePath), "Invalid Merkle Proof or Player Dead");
 
         // 2. Nullifier
         const nullifier = Crypto_hash2(
@@ -88,7 +90,7 @@ module Werewolf {
         assert(!voteNullifiers.member(nullifier), "Action already submitted");
         voteNullifiers.insert(nullifier);
 
-        // 3. Update Transcript with the move (ensures history integrity)
+        // 3. Update Transcript
         const newTranscript = Crypto_hash2(state.transcriptHash, encryptedAction);
 
         // 4. Update Count
@@ -118,7 +120,6 @@ module Werewolf {
 
         const state = games.lookup(gameId);
         
-        // Verify Admin
         assert(std_ownPublicKey() == state.adminKey, "Only Admin can resolve");
         
         if (hasDeath) {
@@ -126,8 +127,6 @@ module Werewolf {
              playerAlive.lookup(gameId).insert(deadPlayerIdx, false);
         }
 
-        // Log the resolution to transcript
-        // We hash the outcome: (deadPlayerIdx, hasDeath)
         const outcomeHash = std_persistentHash<[Uint<32>, Boolean]>([deadPlayerIdx, hasDeath]);
         const newTranscript = Crypto_hash2(state.transcriptHash, outcomeHash);
 
@@ -140,6 +139,7 @@ module Werewolf {
             werewolfCount: state.werewolfCount, 
             villagerCount: state.villagerCount, 
             aliveTreeRoot: newMerkleRoot,
+            masterSecretCommitment: state.masterSecretCommitment,
             transcriptHash: newTranscript
         };
         games.insert(gameId, newState);
@@ -206,7 +206,6 @@ module Werewolf {
             playerAlive.lookup(gameId).insert(eliminatedIdx, false);
         }
 
-        // Log resolution
         const outcomeHash = std_persistentHash<[Uint<32>, Boolean]>([eliminatedIdx, hasElimination]);
         const newTranscript = Crypto_hash2(state.transcriptHash, outcomeHash);
 
@@ -220,6 +219,7 @@ module Werewolf {
             werewolfCount: state.werewolfCount,
             villagerCount: state.villagerCount,
             aliveTreeRoot: state.aliveTreeRoot,
+            masterSecretCommitment: state.masterSecretCommitment,
             transcriptHash: newTranscript
         };
         games.insert(gameId, newState);
@@ -280,11 +280,9 @@ module Werewolf {
         const state = games.lookup(gameId);
         assert(std_ownPublicKey() == state.adminKey, "Only Admin");
 
-        // KEY VERIFICATION: Ensure the secret matches the Public Key used for the game
-        // We temporarily disable this check if running in a mock environment without full EC support
-        // But for production, this binds the secret to the game identity.
-        // const derivedPk = Crypto_derivePublicKey(masterSecret);
-        // assert(derivedPk == state.adminKey, "Invalid Master Secret for this Game");
+        // Verify Secret against Commitment made in initGame
+        const calculatedCommit = Crypto_hash(masterSecret);
+        assert(calculatedCommit == state.masterSecretCommitment, "Invalid Master Secret for this Game");
 
         gameSecrets.insert(gameId, masterSecret);
         
@@ -294,43 +292,30 @@ module Werewolf {
         });
     }
 
-    /**
-     * @description Replays the role setup to verify fairness.
-     * Takes the revealed Master Secret and a specific player index.
-     * Derives the role and salt using the deterministic PRNG logic:
-     *   Salt = Hash(MasterSecret, "salt", PlayerIdx)
-     *   Role = Hash(MasterSecret, "role", PlayerIdx) % RoleCount (simplified)
-     * Checks if the derived commitment matches the on-chain commitment.
-     * 
-     * Note: This assumes the off-chain "Init" logic followed this derivation.
-     * If this passes, the player knows their role wasn't manually picked to screw them.
-     */
     export circuit verifyGameSetup(
         _gameId: Bytes<32>,
         _masterSecret: Bytes<32>,
         _playerIdx: Uint<32>,
-        _assignedRole: Uint<8> // We pass this in to help the circuit verify (witness)
+        _assignedRole: Uint<8>
     ): Boolean {
         const gameId = disclose(_gameId);
         const masterSecret = disclose(_masterSecret);
         const playerIdx = disclose(_playerIdx);
         const assignedRole = disclose(_assignedRole);
 
-        // 1. Verify Secret matches Game Admin (Optional re-check)
         const state = games.lookup(gameId);
-        // const derivedPk = Crypto_derivePublicKey(masterSecret);
-        // if (derivedPk != state.adminKey) return false;
+        
+        // Check secret is valid for this game
+        const calculatedCommit = Crypto_hash(masterSecret);
+        if (calculatedCommit != state.masterSecretCommitment) return false;
 
-        // 2. Re-derive Salt
-        // Deterministic generation: Hash(Secret, Label, Index)
         const saltSeed = std_persistentHash<[Bytes<32>, Bytes<32>, Uint<32>]>([
             masterSecret, 
             pad(32, "salt"), 
             playerIdx
         ]);
-        const derivedSalt = saltSeed; // Use hash directly as salt
+        const derivedSalt = saltSeed;
 
-        // 3. Verify Commitment
         const config = playerConfigs.lookup(gameId).lookup(playerIdx);
         const derivedCommit = Crypto_commitRole(assignedRole, derivedSalt);
 

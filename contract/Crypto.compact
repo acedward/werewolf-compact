@@ -15,7 +15,7 @@ module Crypto {
         return std_persistentHash<[Uint<8>, Bytes<32>]>([role, salt]);
     }
 
-    // Verifies a Merkle Proof
+    // Verifies a Merkle Proof for anonymous voting/actions
     export circuit verifyMerkleProof(root: MerkleTreeDigest, leaf: Bytes<32>, path: MerkleTreePath<10, Bytes<32>>): Boolean {
         // Ensure the leaf in the path matches the claim
         if (path.leaf != leaf) {
@@ -29,19 +29,20 @@ module Crypto {
         return true; 
     }
 
-    // Derives a Public Key (CurvePoint) from a Private Key (Scalar Field)
-    // Used to verify the Master Secret at the end of the game
+    // Derives a Public Key (ZswapCoinPublicKey) from a Private Key (Bytes<32> Secret)
+    // Used to verify the Master Secret at the end of the game matches the Admin Key
     export circuit derivePublicKey(secret: Bytes<32>): ZswapCoinPublicKey {
-        // Convert bytes to field element
+        // 1. Convert bytes to field scalar
         const scalar = std_degradeToTransient(secret);
-        // G * scalar
+        
+        // 2. Compute Public Key Point: P = G * scalar
         const point = std_ecMulGenerator(scalar);
         
-        // Serialize point to Bytes<32> for ZswapCoinPublicKey format
-        // In a real impl, we'd compress X/Y. Here we assume a standard hash/serialization
-        // or just use the X coord if that's the standard. 
-        // For this mock, we'll hash the coordinates to get the bytes representation.
+        // 3. Serialize point to Bytes<32> for ZswapCoinPublicKey format.
+        // We hash the X/Y coordinates to produce a deterministic 32-byte representation.
+        // The Admin must generate their keypair off-chain using this same logic.
         const pkBytes = std_persistentHash<[Field, Field]>([point.x, point.y]);
+        
         return ZswapCoinPublicKey { bytes: pkBytes };
     }
 }

@@ -5,7 +5,7 @@
     "main": "index.js",
     "type": "module",
     "scripts": {
-        "run": "node src/ww.ts",
+        "start": "node src/ww.ts",
         "compile-fast": "compact compile +0.27.0 --skip-zk contract/game.compact ww-dist",
         "compile": "compact compile +0.27.0 contract/game.compact ww-dist",
         "test": "node test/ww.test.ts"

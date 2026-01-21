@@ -24,14 +24,11 @@ export {
 
 constructor() {}
 
-// =========================================================================
-// GAME ACTIONS
-// =========================================================================
-
 export circuit createGame(
     gameId: Bytes<32>, 
     adminKey: ZswapCoinPublicKey,
     initialRoot: MerkleTreeDigest,
+    masterSecretCommitment: Bytes<32>, // New argument
     configs: Vector<10, PlayerConfig>,
     actualCount: Uint<32>,
     werewolfCount: Uint<32>
@@ -40,6 +37,7 @@ export circuit createGame(
         disclose(gameId), 
         disclose(adminKey), 
         disclose(initialRoot), 
+        disclose(masterSecretCommitment),
         disclose(configs), 
         disclose(actualCount), 
         disclose(werewolfCount)
@@ -128,10 +126,7 @@ export circuit verifyFairness(
     );
 }
 
-// =========================================================================
-// READ-ONLY & TEST HELPERS
-// =========================================================================
-
+// Helpers
 export circuit getGameState(gameId: Bytes<32>): GameState {
     const gid = disclose(gameId);
     assert(Werewolf_games.member(gid), "Game not found");
@@ -147,17 +142,18 @@ export circuit getAdminKey(): ZswapCoinPublicKey {
     return Werewolf_getAdminKey();
 }
 
-/**
- * @description Helper for Tests: Generates a role commitment using the contract's 
- * internal hashing logic. Ensures tests pass without crypto mismatches.
- */
 export circuit testComputeCommitment(role: Uint<8>, salt: Bytes<32>): Bytes<32> {
     return Crypto_commitRole(role, salt);
 }
 
-/**
- * @description Helper for Tests: Hashes data to match Merkle Leaf generation.
- */
 export circuit testComputeHash(data: Bytes<32>): Bytes<32> {
     return Crypto_hash(data);
+}
+
+export circuit testComputeSalt(masterSecret: Bytes<32>, playerIdx: Uint<32>): Bytes<32> {
+    return std_persistentHash<[Bytes<32>, Bytes<32>, Uint<32>]>([
+        masterSecret,
+        pad(32, "salt"),
+        playerIdx
+    ]);
 }

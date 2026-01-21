@@ -35,8 +35,11 @@ module WerewolfTypes {
         villagerCount: Uint<32>,
         // Root of the Merkle Tree of ALIVE players
         aliveTreeRoot: MerkleTreeDigest,
+        // Commitment to the Master Secret (Hash(Secret)) used for RNG
+        // Allows verifying game fairness at the end without requiring the Admin
+        // to use their Wallet Private Key as the game entropy source.
+        masterSecretCommitment: Bytes<32>,
         // Rolling hash of all encrypted moves and resolutions
-        // Allows off-chain replay/verification of the exact game sequence
         transcriptHash: Bytes<32>
     }
 }
